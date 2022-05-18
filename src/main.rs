@@ -2,11 +2,14 @@ use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use yew::prelude::*;
 
+const ZOOM_INTENSITY: f64 = 1.2;
+
 enum Msg {
     None,
     MouseDown(i16),
     MouseUp(i16),
     MouseMove,
+    Wheel(f64),
 }
 
 struct Model {
@@ -15,6 +18,20 @@ struct Model {
 }
 
 impl Model {
+    fn canvas(canvas_ref: &NodeRef) -> (HtmlCanvasElement, CanvasRenderingContext2d) {
+        let canvas = canvas_ref
+            .cast::<HtmlCanvasElement>()
+            .expect("could not find canvas element");
+        let context = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<CanvasRenderingContext2d>()
+            .unwrap();
+
+        (canvas, context)
+    }
+
     fn resize_canvas(canvas_ref: &NodeRef) {
         let window = web_sys::window().expect("failed to get `window`");
         let canvas = canvas_ref
@@ -26,19 +43,10 @@ impl Model {
     }
 
     fn draw_image(canvas_ref: &NodeRef, image_ref: &NodeRef) {
-        let canvas = canvas_ref
-            .cast::<HtmlCanvasElement>()
-            .expect("could not find canvas element");
         let image = image_ref
             .cast::<HtmlImageElement>()
             .expect("could not find img element");
-
-        let context = canvas
-            .get_context("2d")
-            .unwrap()
-            .unwrap()
-            .dyn_into::<CanvasRenderingContext2d>()
-            .unwrap();
+        let (canvas, context) = Self::canvas(canvas_ref);
 
         context.save();
         context
@@ -53,6 +61,10 @@ impl Model {
             .draw_image_with_html_image_element(&image, 0.0, 0.0)
             .expect("failed to draw image");
     }
+
+    fn draw(&self) {
+        Self::draw_image(&self.canvas_ref, &self.image_ref);
+    }
 }
 
 impl Component for Model {
@@ -66,19 +78,28 @@ impl Component for Model {
         }
     }
 
+    // trackMouse(e) {
+    //     const offset = this.canvas.getBoundingClientRect();
+    //     this.mouse.x = e.pageX - Math.round(offset.left);
+    //     this.mouse.y = e.pageY - Math.round(offset.top);
+    // }
+
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::MouseDown(button) if button == 0 => {
-                let canvas = self.canvas_ref.cast::<HtmlCanvasElement>().unwrap();
-                let context = canvas
-                    .get_context("2d")
-                    .unwrap()
-                    .unwrap()
-                    .dyn_into::<CanvasRenderingContext2d>()
-                    .unwrap();
-
-                context.translate(20.0, 20.0).unwrap();
-                Self::draw_image(&self.canvas_ref, &self.image_ref);
+                let (_, context) = Self::canvas(&self.canvas_ref);
+                context.scale(5.0, 5.0).unwrap();
+                self.draw();
+            }
+            Msg::Wheel(delta) => {
+                let (_, context) = Self::canvas(&self.canvas_ref);
+                let delta = if delta < 0.0 {
+                    ZOOM_INTENSITY
+                } else {
+                    1.0 / ZOOM_INTENSITY
+                };
+                context.scale(delta, delta).unwrap();
+                self.draw();
             }
             _ => {}
         }
@@ -100,9 +121,11 @@ impl Component for Model {
             Msg::None
         });
 
+        let onwheel = ctx.link().callback(|w: WheelEvent| Msg::Wheel(w.delta_y()));
+
         html! {
             <div>
-                <canvas {onmousedown} {onmouseup} {onmousemove} {oncontextmenu} ref={self.canvas_ref.clone()} />
+                <canvas {onmousedown} {onmouseup} {onmousemove} {oncontextmenu} {onwheel} ref={self.canvas_ref.clone()} />
                 <img ref={self.image_ref.clone()} src="images/final_clean.png" style="display: none" />
             </div>
         }
@@ -117,7 +140,7 @@ impl Component for Model {
 
         // Resize and draw canvas once in the beginning.
         Self::resize_canvas(&self.canvas_ref);
-        Self::draw_image(&self.canvas_ref, &self.image_ref);
+        self.draw();
 
         // Setup event to resize and redraw the canvas every time the window gets resized.
         let closure = {
