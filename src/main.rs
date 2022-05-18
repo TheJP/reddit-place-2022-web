@@ -2,7 +2,12 @@ use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use yew::prelude::*;
 
-struct Msg;
+enum Msg {
+    None,
+    MouseDown(i16),
+    MouseUp(i16),
+    MouseMove,
+}
 
 struct Model {
     canvas_ref: NodeRef,
@@ -35,6 +40,14 @@ impl Model {
             .dyn_into::<CanvasRenderingContext2d>()
             .unwrap();
 
+        context.save();
+        context
+            .reset_transform()
+            .expect("could not reset canvas transform");
+        context.set_fill_style(&"black".into());
+        context.fill_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+        context.restore();
+
         context.set_image_smoothing_enabled(false); // use nearest-neighbour interpolation
         context
             .draw_image_with_html_image_element(&image, 0.0, 0.0)
@@ -53,15 +66,43 @@ impl Component for Model {
         }
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            Msg::MouseDown(button) if button == 0 => {
+                let canvas = self.canvas_ref.cast::<HtmlCanvasElement>().unwrap();
+                let context = canvas
+                    .get_context("2d")
+                    .unwrap()
+                    .unwrap()
+                    .dyn_into::<CanvasRenderingContext2d>()
+                    .unwrap();
+
+                context.translate(20.0, 20.0).unwrap();
+                Self::draw_image(&self.canvas_ref, &self.image_ref);
+            }
+            _ => {}
+        }
         false
     }
 
-    fn view(&self, _ctx: &Context<Self>) -> Html {
-        // let link = ctx.link();
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let onmousedown = ctx
+            .link()
+            .callback(|m: MouseEvent| Msg::MouseDown(m.button()));
+        let onmouseup = ctx
+            .link()
+            .callback(|m: MouseEvent| Msg::MouseUp(m.button()));
+        let onmousemove = ctx.link().callback(|_| Msg::MouseMove);
+
+        // Prevents context menu from appearing.
+        let oncontextmenu = ctx.link().callback(|m: MouseEvent| {
+            m.prevent_default();
+            Msg::None
+        });
+
         html! {
             <div>
-                <canvas ref={self.canvas_ref.clone()} />
+                <canvas {onmousedown} {onmouseup} {onmousemove} {oncontextmenu} ref={self.canvas_ref.clone()} />
                 <img ref={self.image_ref.clone()} src="images/final_clean.png" style="display: none" />
             </div>
         }
@@ -74,11 +115,11 @@ impl Component for Model {
 
         let window = web_sys::window().expect("failed to get `window`");
 
-        // Resize canvas once in the beginning.
+        // Resize and draw canvas once in the beginning.
         Self::resize_canvas(&self.canvas_ref);
         Self::draw_image(&self.canvas_ref, &self.image_ref);
 
-        // Setup event to resize the canvas every time the window gets resized.
+        // Setup event to resize and redraw the canvas every time the window gets resized.
         let closure = {
             let canvas_ref = self.canvas_ref.clone();
             let image_ref = self.image_ref.clone();
