@@ -1,4 +1,4 @@
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use yew::prelude::*;
 
@@ -7,6 +7,39 @@ struct Msg;
 struct Model {
     canvas_ref: NodeRef,
     image_ref: NodeRef,
+}
+
+impl Model {
+    fn resize_canvas(canvas_ref: &NodeRef) {
+        let window = web_sys::window().expect("failed to get `window`");
+        let canvas = canvas_ref
+            .cast::<HtmlCanvasElement>()
+            .expect("could not find canvas element");
+
+        canvas.set_width(window.inner_width().unwrap().as_f64().unwrap() as u32);
+        canvas.set_height(window.inner_height().unwrap().as_f64().unwrap() as u32);
+    }
+
+    fn draw_image(canvas_ref: &NodeRef, image_ref: &NodeRef) {
+        let canvas = canvas_ref
+            .cast::<HtmlCanvasElement>()
+            .expect("could not find canvas element");
+        let image = image_ref
+            .cast::<HtmlImageElement>()
+            .expect("could not find img element");
+
+        let context = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<CanvasRenderingContext2d>()
+            .unwrap();
+
+        context.set_image_smoothing_enabled(false); // use nearest-neighbour interpolation
+        context
+            .draw_image_with_html_image_element(&image, 0.0, 0.0)
+            .expect("failed to draw image");
+    }
 }
 
 impl Component for Model {
@@ -34,25 +67,32 @@ impl Component for Model {
         }
     }
 
-    fn rendered(&mut self, _ctx: &Context<Self>, _first_renderr: bool) {
-        let window = web_sys::window().unwrap();
-        let canvas = self.canvas_ref.cast::<HtmlCanvasElement>().unwrap();
-        let image = self.image_ref.cast::<HtmlImageElement>().unwrap();
+    fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
+        if !first_render {
+            return;
+        }
 
-        canvas.set_width(window.inner_width().unwrap().as_f64().unwrap() as u32);
-        canvas.set_height(window.inner_height().unwrap().as_f64().unwrap() as u32);
+        let window = web_sys::window().expect("failed to get `window`");
 
-        let context = canvas
-            .get_context("2d")
-            .unwrap()
-            .unwrap()
-            .dyn_into::<CanvasRenderingContext2d>()
-            .unwrap();
+        // Resize canvas once in the beginning.
+        Self::resize_canvas(&self.canvas_ref);
+        Self::draw_image(&self.canvas_ref, &self.image_ref);
 
-        context.set_stroke_style(&"red".into());
-        context.stroke_rect(0.0, 0.0, 50.0, 50.0);
-        context.set_image_smoothing_enabled(false); // use nearest-neighbour interpolation
-        context.draw_image_with_html_image_element(&image, 50.0, 50.0).unwrap();
+        // Setup event to resize the canvas every time the window gets resized.
+        let closure = {
+            let canvas_ref = self.canvas_ref.clone();
+            let image_ref = self.image_ref.clone();
+            move || {
+                Self::resize_canvas(&canvas_ref);
+                Self::draw_image(&canvas_ref, &image_ref);
+            }
+        };
+        let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
+        window.set_onresize(Some(closure.as_ref().unchecked_ref()));
+
+        // Makes sure that closure is not dropped at the end of this function.
+        // Because this would make resize events fail on something similar to a dangling pointer.
+        closure.forget();
     }
 }
 

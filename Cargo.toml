@@ -18,4 +18,5 @@ features = [
   'HtmlCanvasElement',
   'HtmlImageElement',
   'Window',
+  'console',
 ]
