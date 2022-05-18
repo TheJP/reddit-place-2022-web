@@ -2,9 +2,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use yew::prelude::*;
 
-enum Msg {
-    AddOne,
-}
+struct Msg;
 
 struct Model {
     canvas_ref: NodeRef,
@@ -22,17 +20,11 @@ impl Component for Model {
         }
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
-        match msg {
-            Msg::AddOne => {
-                // the value has changed so we need to
-                // re-render for it to appear on the page
-                true
-            }
-        }
+    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
+        false
     }
 
-    fn view(&self, ctx: &Context<Self>) -> Html {
+    fn view(&self, _ctx: &Context<Self>) -> Html {
         // let link = ctx.link();
         html! {
             <div>
@@ -43,11 +35,12 @@ impl Component for Model {
     }
 
     fn rendered(&mut self, _ctx: &Context<Self>, _first_renderr: bool) {
+        let window = web_sys::window().unwrap();
         let canvas = self.canvas_ref.cast::<HtmlCanvasElement>().unwrap();
         let image = self.image_ref.cast::<HtmlImageElement>().unwrap();
 
-        canvas.set_width(100);
-        canvas.set_height(100);
+        canvas.set_width(window.inner_width().unwrap().as_f64().unwrap() as u32);
+        canvas.set_height(window.inner_height().unwrap().as_f64().unwrap() as u32);
 
         let context = canvas
             .get_context("2d")
@@ -58,6 +51,7 @@ impl Component for Model {
 
         context.set_stroke_style(&"red".into());
         context.stroke_rect(0.0, 0.0, 50.0, 50.0);
+        context.set_image_smoothing_enabled(false); // use nearest-neighbour interpolation
         context.draw_image_with_html_image_element(&image, 50.0, 50.0).unwrap();
     }
 }

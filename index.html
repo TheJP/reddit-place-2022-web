@@ -4,5 +4,20 @@
     <meta charset="utf-8" />
     <title>Yew App</title>
     <link data-trunk="data-trunk" rel="copy-dir" href="images" />
+    <style>
+      * {
+        padding: 0;
+        margin: 0;
+      }
+
+      html, body, div, canvas {
+        width: 100%;
+        height: 100%;
+      }
+
+      canvas {
+        display: block; /* makes canvas exact size (no scrollbar with 100% height) */
+      }
+    </style>
   </head>
 </html>
