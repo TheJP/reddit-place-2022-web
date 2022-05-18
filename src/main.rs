@@ -1,3 +1,5 @@
+use wasm_bindgen::JsCast;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use yew::prelude::*;
 
 enum Msg {
@@ -5,7 +7,8 @@ enum Msg {
 }
 
 struct Model {
-    value: i64,
+    canvas_ref: NodeRef,
+    image_ref: NodeRef,
 }
 
 impl Component for Model {
@@ -14,14 +17,14 @@ impl Component for Model {
 
     fn create(_ctx: &Context<Self>) -> Self {
         Self {
-            value: 0,
+            canvas_ref: NodeRef::default(),
+            image_ref: NodeRef::default(),
         }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::AddOne => {
-                self.value += 1;
                 // the value has changed so we need to
                 // re-render for it to appear on the page
                 true
@@ -30,14 +33,32 @@ impl Component for Model {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        // This gives us a component's "`Scope`" which allows us to send messages, etc to the component.
-        let link = ctx.link();
+        // let link = ctx.link();
         html! {
             <div>
-                <button onclick={link.callback(|_| Msg::AddOne)}>{ "+1" }</button>
-                <p>{ self.value }</p>
+                <canvas ref={self.canvas_ref.clone()} />
+                <img ref={self.image_ref.clone()} src="images/final_clean.png" style="display: none" />
             </div>
         }
+    }
+
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_renderr: bool) {
+        let canvas = self.canvas_ref.cast::<HtmlCanvasElement>().unwrap();
+        let image = self.image_ref.cast::<HtmlImageElement>().unwrap();
+
+        canvas.set_width(100);
+        canvas.set_height(100);
+
+        let context = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<CanvasRenderingContext2d>()
+            .unwrap();
+
+        context.set_stroke_style(&"red".into());
+        context.stroke_rect(0.0, 0.0, 50.0, 50.0);
+        context.draw_image_with_html_image_element(&image, 50.0, 50.0).unwrap();
     }
 }
 
