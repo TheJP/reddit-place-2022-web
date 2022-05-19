@@ -19,6 +19,7 @@ struct Model {
     canvas_ref: NodeRef,
     image_ref: NodeRef,
     translation: (f64, f64),
+    zoom: f64,
     drag: Drag,
 }
 
@@ -84,7 +85,7 @@ impl Model {
             translation_y += (current.1 - start.1) as f64;
         }
         context
-            .set_transform(1.0, 0.0, 0.0, 1.0, translation_x, translation_y)
+            .set_transform(self.zoom, 0.0, 0.0, self.zoom, translation_x, translation_y)
             .expect("could not set transformation matrix");
         self.draw_image();
     }
@@ -99,6 +100,7 @@ impl Component for Model {
             canvas_ref: NodeRef::default(),
             image_ref: NodeRef::default(),
             translation: (0.0, 0.0),
+            zoom: 1.0,
             drag: Drag {
                 dragging: false,
                 start: None,
@@ -135,13 +137,12 @@ impl Component for Model {
                 self.draw();
             }
             Msg::Wheel(delta, _) if !self.drag.dragging => {
-                let (_, context) = self.canvas();
-                let delta = if delta < 0.0 {
+                let delta = if delta > 0.0 {
                     ZOOM_INTENSITY
                 } else {
                     1.0 / ZOOM_INTENSITY
                 };
-                context.scale(delta, delta).unwrap();
+                self.zoom *= delta;
                 self.draw();
             }
             _ => {}
