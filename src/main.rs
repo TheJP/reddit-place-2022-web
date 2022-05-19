@@ -18,6 +18,14 @@ enum Msg {
 struct Model {
     canvas_ref: NodeRef,
     image_ref: NodeRef,
+    translation: (f64, f64),
+    drag: Drag,
+}
+
+struct Drag {
+    dragging: bool,
+    start: Option<MousePosition>,
+    current: Option<MousePosition>,
 }
 
 impl Model {
@@ -69,6 +77,15 @@ impl Model {
     }
 
     fn draw(&self) {
+        let (_, context) = self.canvas();
+        let (mut translation_x, mut translation_y) = self.translation;
+        if let (Some(start), Some(current)) = (self.drag.start, self.drag.current) {
+            translation_x += (current.0 - start.0) as f64;
+            translation_y += (current.1 - start.1) as f64;
+        }
+        context
+            .set_transform(1.0, 0.0, 0.0, 1.0, translation_x, translation_y)
+            .expect("could not set transformation matrix");
         self.draw_image();
     }
 }
@@ -81,6 +98,12 @@ impl Component for Model {
         Self {
             canvas_ref: NodeRef::default(),
             image_ref: NodeRef::default(),
+            translation: (0.0, 0.0),
+            drag: Drag {
+                dragging: false,
+                start: None,
+                current: None,
+            },
         }
     }
 
@@ -90,12 +113,28 @@ impl Component for Model {
                 self.resize_canvas();
                 self.draw();
             }
-            Msg::MouseDown(button, _) if button == 0 => {
-                let (_, context) = self.canvas();
-                context.scale(5.0, 5.0).unwrap();
+            Msg::MouseDown(button, position) if button == 0 => {
+                self.drag.dragging = true;
+                self.drag.start = Some(position);
+                self.drag.current = Some(position);
+            }
+            Msg::MouseUp(button, position) if button == 0 => {
+                if let Some(start) = self.drag.start {
+                    self.translation = (
+                        self.translation.0 + (position.0 - start.0) as f64,
+                        self.translation.1 + (position.1 - start.1) as f64,
+                    );
+                }
+                self.drag.dragging = false;
+                self.drag.start = None;
+                self.drag.current = None;
                 self.draw();
             }
-            Msg::Wheel(delta, _) => {
+            Msg::MouseMove(position) if self.drag.dragging => {
+                self.drag.current = Some(position);
+                self.draw();
+            }
+            Msg::Wheel(delta, _) if !self.drag.dragging => {
                 let (_, context) = self.canvas();
                 let delta = if delta < 0.0 {
                     ZOOM_INTENSITY
@@ -104,12 +143,6 @@ impl Component for Model {
                 };
                 context.scale(delta, delta).unwrap();
                 self.draw();
-            }
-            Msg::MouseMove(position) => {
-                self.draw();
-                let (_, context) = self.canvas();
-                context.set_fill_style(&"red".into());
-                context.fill_rect(position.x as f64, position.y as f64, 50.0, 50.0);
             }
             _ => {}
         }
