@@ -5,11 +5,11 @@ use yew::prelude::*;
 const ZOOM_INTENSITY: f64 = 1.2;
 
 enum Msg {
-    None,
     MouseDown(i16),
     MouseUp(i16),
     MouseMove,
     Wheel(f64),
+    Resize,
 }
 
 struct Model {
@@ -18,8 +18,9 @@ struct Model {
 }
 
 impl Model {
-    fn canvas(canvas_ref: &NodeRef) -> (HtmlCanvasElement, CanvasRenderingContext2d) {
-        let canvas = canvas_ref
+    fn canvas(&self) -> (HtmlCanvasElement, CanvasRenderingContext2d) {
+        let canvas = self
+            .canvas_ref
             .cast::<HtmlCanvasElement>()
             .expect("could not find canvas element");
         let context = canvas
@@ -32,9 +33,10 @@ impl Model {
         (canvas, context)
     }
 
-    fn resize_canvas(canvas_ref: &NodeRef) {
+    fn resize_canvas(&self) {
         let window = web_sys::window().expect("failed to get `window`");
-        let canvas = canvas_ref
+        let canvas = self
+            .canvas_ref
             .cast::<HtmlCanvasElement>()
             .expect("could not find canvas element");
 
@@ -42,11 +44,12 @@ impl Model {
         canvas.set_height(window.inner_height().unwrap().as_f64().unwrap() as u32);
     }
 
-    fn draw_image(canvas_ref: &NodeRef, image_ref: &NodeRef) {
-        let image = image_ref
+    fn draw_image(&self) {
+        let image = self
+            .image_ref
             .cast::<HtmlImageElement>()
             .expect("could not find img element");
-        let (canvas, context) = Self::canvas(canvas_ref);
+        let (canvas, context) = self.canvas();
 
         context.save();
         context
@@ -63,7 +66,7 @@ impl Model {
     }
 
     fn draw(&self) {
-        Self::draw_image(&self.canvas_ref, &self.image_ref);
+        self.draw_image();
     }
 }
 
@@ -86,13 +89,17 @@ impl Component for Model {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
+            Msg::Resize => {
+                self.resize_canvas();
+                self.draw();
+            }
             Msg::MouseDown(button) if button == 0 => {
-                let (_, context) = Self::canvas(&self.canvas_ref);
+                let (_, context) = self.canvas();
                 context.scale(5.0, 5.0).unwrap();
                 self.draw();
             }
             Msg::Wheel(delta) => {
-                let (_, context) = Self::canvas(&self.canvas_ref);
+                let (_, context) = self.canvas();
                 let delta = if delta < 0.0 {
                     ZOOM_INTENSITY
                 } else {
@@ -116,9 +123,9 @@ impl Component for Model {
         let onmousemove = ctx.link().callback(|_| Msg::MouseMove);
 
         // Prevents context menu from appearing.
-        let oncontextmenu = ctx.link().callback(|m: MouseEvent| {
+        let oncontextmenu = ctx.link().batch_callback(|m: MouseEvent| {
             m.prevent_default();
-            Msg::None
+            None
         });
 
         let onwheel = ctx.link().callback(|w: WheelEvent| Msg::Wheel(w.delta_y()));
@@ -131,7 +138,7 @@ impl Component for Model {
         }
     }
 
-    fn rendered(&mut self, _ctx: &Context<Self>, first_render: bool) {
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
         if !first_render {
             return;
         }
@@ -139,19 +146,13 @@ impl Component for Model {
         let window = web_sys::window().expect("failed to get `window`");
 
         // Resize and draw canvas once in the beginning.
-        Self::resize_canvas(&self.canvas_ref);
+        self.resize_canvas();
         self.draw();
 
         // Setup event to resize and redraw the canvas every time the window gets resized.
-        let closure = {
-            let canvas_ref = self.canvas_ref.clone();
-            let image_ref = self.image_ref.clone();
-            move || {
-                Self::resize_canvas(&canvas_ref);
-                Self::draw_image(&canvas_ref, &image_ref);
-            }
-        };
-        let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
+        let onresize = ctx.link().callback(|_: Event| Msg::Resize);
+        let closure = move |e| onresize.emit(e);
+        let closure = Closure::wrap(Box::new(closure) as Box<dyn Fn(Event)>);
         window.set_onresize(Some(closure.as_ref().unchecked_ref()));
 
         // Makes sure that closure is not dropped at the end of this function.
