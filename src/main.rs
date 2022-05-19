@@ -1,3 +1,6 @@
+mod mouse_position;
+
+use mouse_position::MousePosition;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use yew::prelude::*;
@@ -5,10 +8,10 @@ use yew::prelude::*;
 const ZOOM_INTENSITY: f64 = 1.2;
 
 enum Msg {
-    MouseDown(i16),
-    MouseUp(i16),
-    MouseMove,
-    Wheel(f64),
+    MouseDown(i16, MousePosition),
+    MouseUp(i16, MousePosition),
+    MouseMove(MousePosition),
+    Wheel(f64, MousePosition),
     Resize,
 }
 
@@ -81,24 +84,18 @@ impl Component for Model {
         }
     }
 
-    // trackMouse(e) {
-    //     const offset = this.canvas.getBoundingClientRect();
-    //     this.mouse.x = e.pageX - Math.round(offset.left);
-    //     this.mouse.y = e.pageY - Math.round(offset.top);
-    // }
-
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Msg::Resize => {
                 self.resize_canvas();
                 self.draw();
             }
-            Msg::MouseDown(button) if button == 0 => {
+            Msg::MouseDown(button, _) if button == 0 => {
                 let (_, context) = self.canvas();
                 context.scale(5.0, 5.0).unwrap();
                 self.draw();
             }
-            Msg::Wheel(delta) => {
+            Msg::Wheel(delta, _) => {
                 let (_, context) = self.canvas();
                 let delta = if delta < 0.0 {
                     ZOOM_INTENSITY
@@ -108,6 +105,12 @@ impl Component for Model {
                 context.scale(delta, delta).unwrap();
                 self.draw();
             }
+            Msg::MouseMove(position) => {
+                self.draw();
+                let (_, context) = self.canvas();
+                context.set_fill_style(&"red".into());
+                context.fill_rect(position.x as f64, position.y as f64, 50.0, 50.0);
+            }
             _ => {}
         }
         false
@@ -116,11 +119,13 @@ impl Component for Model {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let onmousedown = ctx
             .link()
-            .callback(|m: MouseEvent| Msg::MouseDown(m.button()));
+            .callback(|m: MouseEvent| Msg::MouseDown(m.button(), m.into()));
         let onmouseup = ctx
             .link()
-            .callback(|m: MouseEvent| Msg::MouseUp(m.button()));
-        let onmousemove = ctx.link().callback(|_| Msg::MouseMove);
+            .callback(|m: MouseEvent| Msg::MouseUp(m.button(), m.into()));
+        let onmousemove = ctx
+            .link()
+            .callback(|m: MouseEvent| Msg::MouseMove(m.into()));
 
         // Prevents context menu from appearing.
         let oncontextmenu = ctx.link().batch_callback(|m: MouseEvent| {
@@ -128,12 +133,17 @@ impl Component for Model {
             None
         });
 
-        let onwheel = ctx.link().callback(|w: WheelEvent| Msg::Wheel(w.delta_y()));
+        let onwheel = ctx
+            .link()
+            .callback(|w: WheelEvent| Msg::Wheel(w.delta_y(), w.into()));
+
+        // Makes canvas resize and redraw as soon as the image is loaded.
+        let onload = ctx.link().callback(|_| Msg::Resize);
 
         html! {
             <div>
                 <canvas {onmousedown} {onmouseup} {onmousemove} {oncontextmenu} {onwheel} ref={self.canvas_ref.clone()} />
-                <img ref={self.image_ref.clone()} src="images/final_clean.png" style="display: none" />
+                <img {onload} ref={self.image_ref.clone()} src="images/final_clean.png" style="display: none" />
             </div>
         }
     }
