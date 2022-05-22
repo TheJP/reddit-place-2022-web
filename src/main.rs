@@ -136,13 +136,23 @@ impl Component for Model {
                 self.drag.current = Some(position);
                 self.draw();
             }
-            Msg::Wheel(delta, _) if !self.drag.dragging => {
-                let delta = if delta > 0.0 {
+            Msg::Wheel(delta, MousePosition(x, y)) if !self.drag.dragging => {
+                // Calculate zoom factor (delta) and zoom the canvas.
+                let delta = if delta < 0.0 {
                     ZOOM_INTENSITY
                 } else {
                     1.0 / ZOOM_INTENSITY
                 };
                 self.zoom *= delta;
+
+                // Translate cursor to origin.
+                let (x, y) = (x as f64, y as f64);
+                let translation = (self.translation.0 - x, self.translation.1 - y);
+
+                // Scale translation, then translate origin back to the cursor position.
+                // These translations achive that the cursor stays above the pixels that were hovered before the zooming.
+                self.translation = (translation.0 * delta + x, translation.1 * delta + y);
+
                 self.draw();
             }
             _ => {}
