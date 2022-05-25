@@ -24,10 +24,43 @@ struct Model {
     drag: Drag,
 }
 
+#[derive(Default)]
 struct Drag {
     dragging: bool,
     start: Option<MousePosition>,
     current: Option<MousePosition>,
+}
+
+impl Drag {
+    fn mouse_down(&mut self, position: MousePosition) {
+        self.dragging = true;
+        self.start = Some(position);
+        self.current = Some(position);
+    }
+
+    fn mouse_move(&mut self, position: MousePosition) {
+        if self.dragging {
+            self.current = Some(position);
+        }
+    }
+
+    fn mouse_up(&mut self, position: MousePosition) -> (f64, f64) {
+        self.mouse_move(position);
+        let translation = self.get_translation();
+        self.dragging = false;
+        self.start = None;
+        self.current = None;
+        translation
+    }
+
+    fn get_translation(&self) -> (f64, f64) {
+        match (self.current, self.start) {
+            (Some(current), Some(start)) => {
+                ((current.0 - start.0) as f64, (current.1 - start.1) as f64)
+            }
+            _ => (0.0, 0.0),
+        }
+    }
 }
 
 impl Model {
@@ -80,13 +113,10 @@ impl Model {
 
     fn draw(&self) {
         let (_, context) = self.canvas();
-        let (mut translation_x, mut translation_y) = self.translation;
-        if let (Some(start), Some(current)) = (self.drag.start, self.drag.current) {
-            translation_x += (current.0 - start.0) as f64;
-            translation_y += (current.1 - start.1) as f64;
-        }
+        let (x, y) = self.drag.get_translation();
+        let translation = (self.translation.0 + x, self.translation.1 + y);
         context
-            .set_transform(self.zoom, 0.0, 0.0, self.zoom, translation_x, translation_y)
+            .set_transform(self.zoom, 0.0, 0.0, self.zoom, translation.0, translation.1)
             .expect("could not set transformation matrix");
         self.draw_image();
     }
@@ -102,11 +132,7 @@ impl Component for Model {
             image_ref: NodeRef::default(),
             translation: (0.0, 0.0),
             zoom: 1.0,
-            drag: Drag {
-                dragging: false,
-                start: None,
-                current: None,
-            },
+            drag: Drag::default(),
         }
     }
 
@@ -116,25 +142,14 @@ impl Component for Model {
                 self.resize_canvas();
                 self.draw();
             }
-            Msg::MouseDown(button, position) if button == 0 => {
-                self.drag.dragging = true;
-                self.drag.start = Some(position);
-                self.drag.current = Some(position);
-            }
-            Msg::MouseUp(button, position) if button == 0 => {
-                if let Some(start) = self.drag.start {
-                    self.translation = (
-                        self.translation.0 + (position.0 - start.0) as f64,
-                        self.translation.1 + (position.1 - start.1) as f64,
-                    );
-                }
-                self.drag.dragging = false;
-                self.drag.start = None;
-                self.drag.current = None;
+            Msg::MouseDown(1 | 2, position) => self.drag.mouse_down(position),
+            Msg::MouseUp(1 | 2, position) => {
+                let (x, y) = self.drag.mouse_up(position);
+                self.translation = (self.translation.0 + x, self.translation.1 + y);
                 self.draw();
             }
-            Msg::MouseMove(position) if self.drag.dragging => {
-                self.drag.current = Some(position);
+            Msg::MouseMove(position) => {
+                self.drag.mouse_move(position);
                 self.draw();
             }
             Msg::Wheel(delta, MousePosition(x, y)) if !self.drag.dragging => {
