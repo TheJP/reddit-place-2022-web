@@ -13,6 +13,7 @@ enum Msg {
     MouseMove(MousePosition),
     Wheel(f64, MousePosition),
     Resize,
+    Reset,
 }
 
 struct Model {
@@ -155,6 +156,11 @@ impl Component for Model {
 
                 self.draw();
             }
+            Msg::Reset => {
+                self.zoom = 1.0;
+                self.translation = (1.0, 1.0);
+                self.draw();
+            }
             _ => {}
         }
         false
@@ -184,10 +190,13 @@ impl Component for Model {
         // Makes canvas resize and redraw as soon as the image is loaded.
         let onload = ctx.link().callback(|_| Msg::Resize);
 
+        let reset = ctx.link().callback(|_| Msg::Reset);
+
         html! {
             <div>
                 <canvas {onmousedown} {onmouseup} {onmousemove} {oncontextmenu} {onwheel} ref={self.canvas_ref.clone()} />
                 <img {onload} ref={self.image_ref.clone()} src="images/final_clean.png" style="display: none" />
+                <button onclick={reset} style="position: absolute; top: 0">{ "Reset" }</button>
             </div>
         }
     }
